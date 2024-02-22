@@ -17,30 +17,46 @@ def set_random_seed(seed):
     np.random.seed(seed)
 
 
-def main(config):
-    print_config(config)
-    set_random_seed(config['random_seed'])
-    model = ModelHandler(config)
+def main(simple_config : dict):
+    print_config(simple_config)
+    set_random_seed(simple_config['random_seed'])
+    model = ModelHandler(simple_config)
     model.train()
     model.test()
 
 
-def multi_run_main(config):
-    print_config(config)
-    set_random_seed(config['random_seed'])
-    hyperparams = []
-    for k, v in config.items():
+def multi_run_main(complex_config : dict):
+    """
+    `complex_config`: a config dict contains some lists.
+
+    You can add `--multi_run` in the command \
+    to run multiple times with different random seeds. 
+    
+    Please see `config/cora/idgl.yml` for example. 
+    
+    TODO figure out how this works... 
+    """
+    print_config(complex_config)
+    set_random_seed(complex_config['random_seed'])          # *** random_seed
+
+    hyperparam_names = []
+    for hyperparam_name, v in complex_config.items():
         if isinstance(v, list):
-            hyperparams.append(k)
+            hyperparam_names.append(hyperparam_name)
 
     scores = []
-    configs = grid(config)
-    for cnf in configs:
-        print('\n')
-        for k in hyperparams:
-            cnf['out_dir'] += '_{}_{}'.format(k, cnf[k])
-        print(cnf['out_dir'])
-        model = ModelHandler(cnf)
+    simple_configs = gen_simple_configs(complex_config)
+
+    for simple_config in simple_configs:
+        for hyperparam_name in hyperparam_names:    # different dir for different config
+
+            # The dir name only include parameters that are waiting to tune.
+            simple_config['out_dir'] += '_{}_{}'.format(hyperparam_name, 
+                                                            simple_config[hyperparam_name])
+        
+        print("\nOutput dir: " + simple_config['out_dir'])
+
+        model = ModelHandler(simple_config)
         dev_metrics = model.train()
         test_metrics = model.test()
         scores.append(test_metrics[model.model.metric_name])
@@ -53,14 +69,14 @@ def multi_run_main(config):
 ################################################################################
 # ArgParse and Helper Functions #
 ################################################################################
-def get_config(config_path="config.yml"):
+def get_config(config_path="config.yml") -> dict:
     with open(config_path, "r") as setting:
-        config = yaml.load(setting)
+        config = yaml.safe_load(setting)
     return config
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-config', '--config', required=True, type=str, help='path to the config file')
+    parser.add_argument('--config', required=True, type=str, help='path to the config file')
     parser.add_argument('--multi_run', action='store_true', help='flag: multi run')
     args = vars(parser.parse_args())
     return args
@@ -70,30 +86,36 @@ def print_config(config):
     print("**************** MODEL CONFIGURATION ****************")
     for key in sorted(config.keys()):
         val = config[key]
-        keystr = "{}".format(key) + (" " * (24 - len(key)))
+        keystr = "{}".format(key) + (" " * (36 - len(key)))
         print("{} -->   {}".format(keystr, val))
     print("**************** MODEL CONFIGURATION ****************")
 
 
-def grid(kwargs):
-    """Builds a mesh grid with given keyword arguments for this Config class.
-    If the value is not a list, then it is considered fixed"""
+def gen_simple_configs(complex_config : dict):
+    """
+    `complex_config`: a config dict contains some lists.
 
+    This function split the complex config into multiple simple configs.
+
+    If the value is not a list, then it is considered fixed.add()
+    """
     class MncDc:
         """This is because np.meshgrid does not always work properly..."""
 
-        def __init__(self, a):
-            self.a = a  # tuple!
+        def __init__(self, a : tuple):
+            self.a = a
 
         def __call__(self):
             return self.a
 
     def merge_dicts(*dicts):
         """
-        Merges dictionaries recursively. Accepts also `None` and returns always a (possibly empty) dictionary
+        Merges dictionaries recursively (max_depth == 2). 
+        
+        Accepts also `None` and returns always a (possibly empty) dictionary.
         """
         from functools import reduce
-        def merge_two_dicts(x, y):
+        def merge_two_dicts(x : dict, y : dict):
             z = x.copy()  # start with x's keys and values
             z.update(y)  # modifies z with y's keys and values & returns None
             return z
@@ -101,27 +123,33 @@ def grid(kwargs):
         return reduce(lambda a, nd: merge_two_dicts(a, nd if nd else {}), dicts, {})
 
 
-    sin = OrderedDict({k: v for k, v in kwargs.items() if isinstance(v, list)})
-    for k, v in sin.items():
-        copy_v = []
-        for e in v:
-            copy_v.append(MncDc(e) if isinstance(e, tuple) else e)
-        sin[k] = copy_v
+    hyperparams = OrderedDict({k: v for k, v in complex_config.items() 
+                                        if isinstance(v, list)})
 
-    grd = np.array(np.meshgrid(*sin.values()), dtype=object).T.reshape(-1, len(sin.values()))
+    # convert tuple param into type `MncDc`
+    for param_name, params in hyperparams.items():
+        params_copy = []
+        for param in params:
+            params_copy.append(MncDc(param)             # ? `MncDc` just stores a tuple... 
+                                    if isinstance(param, tuple) else param)
+        hyperparams[param_name] = params_copy
+
+    # each row is a group of hyperparameters
+    param_groups = np.array(np.meshgrid(*hyperparams.values()), 
+                                            dtype=object).T.reshape(-1, len(hyperparams.values()))
     return [merge_dicts(
-        {k: v for k, v in kwargs.items() if not isinstance(v, list)},
-        {k: vv[i]() if isinstance(vv[i], MncDc) else vv[i] for i, k in enumerate(sin)}
-    ) for vv in grd]
+        {k: v for k, v in complex_config.items() if not isinstance(v, list)},
+        {k: row[i]() if isinstance(row[i], MncDc) else row[i] for i, k in enumerate(hyperparams)}
+    ) for row in param_groups]
 
 
 ################################################################################
 # Module Command-line Behavior #
 ################################################################################
 if __name__ == '__main__':
-    cfg = get_args()
-    config = get_config(cfg['config'])
-    if cfg['multi_run']:
+    args = get_args()
+    config = get_config(args['config'])
+    if args['multi_run']:
         multi_run_main(config)
     else:
         main(config)
