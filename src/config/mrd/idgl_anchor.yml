@@ -93,7 +93,6 @@ no_gnn: False
 
 
 
-random_seed: 1234
 shuffle: True # Whether to shuffle the examples during training
 max_epochs: 1000
 patience: 10

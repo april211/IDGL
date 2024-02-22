@@ -19,7 +19,7 @@ def set_random_seed(seed):
 
 def main(simple_config : dict):
     print_config(simple_config)
-    set_random_seed(simple_config['random_seed'])
+    set_random_seed(simple_config['seed'])
     model = ModelHandler(simple_config)
     model.train()
     model.test()
@@ -37,7 +37,6 @@ def multi_run_main(complex_config : dict):
     TODO figure out how this works... 
     """
     print_config(complex_config)
-    set_random_seed(complex_config['random_seed'])          # *** random_seed
 
     hyperparam_names = []
     for hyperparam_name, v in complex_config.items():
@@ -55,6 +54,8 @@ def multi_run_main(complex_config : dict):
                                                             simple_config[hyperparam_name])
         
         print("\nOutput dir: " + simple_config['out_dir'])
+
+        set_random_seed(simple_config['seed'])
 
         model = ModelHandler(simple_config)
         dev_metrics = model.train()
