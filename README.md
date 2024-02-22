@@ -29,13 +29,13 @@ Please take the following steps to create a python virtual environment.
 * Run the IDGL model and report the performance
 
     ```
-         python main.py -config config/cora/idgl.yml
+         python main.py --config config/cora/idgl.yml
     ```
 
 * Run the IDGL-Anch model and report the performance
 
     ```
-         python main.py -config config/cora/idgl_anchor.yml
+         python main.py --config config/cora/idgl_anchor.yml
     ```
 
 
