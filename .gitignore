@@ -3,5 +3,5 @@
 out/
 test/
 .vscode/
-data/20news-bydate-*
+data/20news
 src/dataset
