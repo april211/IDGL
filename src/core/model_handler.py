@@ -24,7 +24,7 @@ class ModelHandler(object):
     """High level model_handler that trains/validates/tests the network,
     tracks and logs metrics.
     """
-    def __init__(self, config):
+    def __init__(self, config : dict):
         # Evaluation Metrics:
         self._train_loss = AverageMeter()
         self._dev_loss = AverageMeter()
@@ -51,13 +51,6 @@ class ModelHandler(object):
         else:
             self.device = torch.device('cpu')
         config['device'] = self.device
-
-
-        seed = config.get('seed', 42)
-        np.random.seed(seed)
-        torch.manual_seed(seed)
-        if self.device:
-            torch.cuda.manual_seed(seed)
 
 
         datasets = prepare_datasets(config)
