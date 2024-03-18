@@ -2,13 +2,12 @@ import re
 import string
 
 
-################################################################################
-# Text Processing Helper Functions #
-################################################################################
-
-
 def normalize_text(s):
-    """Lower text and remove punctuation, articles and extra whitespace."""
+    """
+    Lower text and remove punctuation, articles and extra whitespace.
+    
+    TODO move this function to a separate file.
+    """
     def remove_articles(text):
         return re.sub(r'\b(a|an|the)\b', ' ', text)
 
@@ -28,23 +27,30 @@ def normalize_text(s):
 class AverageMeter(object):
     """Computes and stores the average and current value."""
     def __init__(self):
-        self.history = []
-        self.last = None
-        self.val = 0
+        self.history_means = []
+        self.last_mean = None
+        self.current_val = 0
         self.sum = 0
         self.count = 0
 
     def reset(self):
-        self.last = self.mean()
-        self.history.append(self.last)
-        self.val = 0
+        """
+        Store the last mean into list `self.history` and reset the meter.
+        """
+        self.last_mean = self.mean()
+        self.history_means.append(self.last_mean)
+
+        self.current_val = 0
         self.sum = 0
         self.count = 0
 
-    def update(self, val, n=1):
-        self.val = val
-        self.sum += val * n
-        self.count += n
+    def update(self, val, repetition=1):
+        """
+        Add a new value to the meter repeatedly.
+        """
+        self.current_val = val
+        self.sum += val * repetition
+        self.count += repetition
 
     def mean(self):
         if self.count == 0:
