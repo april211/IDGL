@@ -55,7 +55,7 @@ def get_config(config_path="config.yml"):
         config = yaml.load(setting)
     return config
 
-def normalize_adj(mx):
+def syn_normalize_adj_torch(mx : torch.FloatTensor):
     """Row-normalize matrix: symmetric normalized Laplacian"""
     rowsum = mx.sum(1)
     r_inv_sqrt = torch.pow(rowsum, -0.5).flatten()
@@ -86,13 +86,19 @@ def batch_normalize_adj(mx, mask=None):
     r_mat_inv_sqrt = torch.stack(r_mat_inv_sqrt, 0)
     return torch.matmul(torch.matmul(mx, r_mat_inv_sqrt).transpose(-1, -2), r_mat_inv_sqrt)
 
-def normalize_sparse_adj(mx):
-    """Row-normalize sparse matrix: symmetric normalized Laplacian"""
-    rowsum = np.array(mx.sum(1))
-    r_inv_sqrt = np.power(rowsum, -0.5).flatten()
+def sym_normalize_sparse_adj_scipy(mx_sp) -> sp.csr_matrix:
+    """Symmetric normalize the given sparse adj. matrix."""
+
+    mx_sp : sp.csr_matrix = mx_sp.tocsr()
+    rowsum = np.array(mx_sp.sum(1, dtype=np.float32), dtype=np.float32)
+
+    # ignore "divide by zero" warning for the isolated nodes
+    with np.errstate(divide='ignore'):
+        r_inv_sqrt = np.power(rowsum, -0.5, dtype=np.float32).flatten()
     r_inv_sqrt[np.isinf(r_inv_sqrt)] = 0.
-    r_mat_inv_sqrt = sp.diags(r_inv_sqrt)
-    return mx.dot(r_mat_inv_sqrt).transpose().dot(r_mat_inv_sqrt)
+
+    r_mat_inv_sqrt = sp.diags(r_inv_sqrt, format='csr', dtype=np.float32)
+    return r_mat_inv_sqrt.dot(mx_sp).dot(r_mat_inv_sqrt)
 
 def to_undirected(edge_index, num_nodes=None):
     if num_nodes is None:
@@ -100,18 +106,22 @@ def to_undirected(edge_index, num_nodes=None):
     else:
         num_nodes = max(num_nodes, edge_index.max() + 1)
 
+    data_type = np.int8
     row, col = edge_index
-    data = np.ones(edge_index.shape[1])
-    adj = sp.csr_matrix((data, (row, col)), shape=(num_nodes, num_nodes))
+
+    vec_of_ones = np.ones(edge_index.shape[1], dtype=data_type)
+    adj = sp.csr_matrix((vec_of_ones, (row, col)), shape=(num_nodes, num_nodes), 
+                                                    dtype=data_type)
+
+    # make the matrix `adj` symmetric
     adj = (adj + adj.transpose()) > 0
-    return adj.astype(np.float64)
 
+    return adj.astype(data_type)          # use int8 instead of float64
 
-def sparse_mx_to_torch_sparse_tensor(sparse_mx):
+def csr_sp_scipy_2_torch(sparse_mx):
     """Convert a scipy sparse matrix to a torch sparse tensor."""
-    sparse_mx = sparse_mx.tocoo().astype(np.float32)
-    indices = torch.from_numpy(
-        np.vstack((sparse_mx.row, sparse_mx.col)).astype(np.int64))
-    values = torch.from_numpy(sparse_mx.data)
-    shape = torch.Size(sparse_mx.shape)
-    return torch.sparse.FloatTensor(indices, values, shape)
+    sparse_mx : sp.csr_matrix = sparse_mx.tocsr().astype(np.float32)
+    return torch.sparse_csr_tensor(crow_indices=sparse_mx.indptr, 
+                                   col_indices=sparse_mx.indices,
+                                   values=sparse_mx.data,
+                                   dtype=torch.float32)
